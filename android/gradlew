@@ -1,0 +1,16 @@
+#!/bin/sh
+# Gradle wrapper launcher: downloads the Gradle version in gradle/wrapper/gradle-wrapper.properties
+# on first use, then runs it.
+APP_HOME=$(cd "$(dirname "$0")" && pwd -P) || exit 1
+CLASSPATH="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+
+if [ -n "$JAVA_HOME" ]; then
+    JAVACMD="$JAVA_HOME/bin/java"
+    [ -x "$JAVACMD" ] || { echo "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME" >&2; exit 1; }
+else
+    JAVACMD=java
+    command -v java >/dev/null 2>&1 || { echo "ERROR: JAVA_HOME is not set and no 'java' command could be found." >&2; exit 1; }
+fi
+
+exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS "-Dorg.gradle.appname=gradlew" \
+    -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"

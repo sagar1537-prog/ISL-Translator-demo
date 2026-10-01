@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="indigo">#FF1D2B64</color>
+    <color name="wall">#FFEEF1F5</color>
+    <color name="ink">#FF121A33</color>
+    <color name="slate">#FF5B6478</color>
+    <color name="signal">#FFF2B705</color>
+</resources>
