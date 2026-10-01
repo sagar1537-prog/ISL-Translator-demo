@@ -1,0 +1,4 @@
+flask>=3.0
+numpy
+# production server for Linux hosting (Render, Railway, Fly.io, ...); not needed on Windows
+gunicorn; sys_platform != "win32"

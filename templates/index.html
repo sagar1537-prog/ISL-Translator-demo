@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ISL Counter</title>
+  <meta name="description" content="Indian Sign Language to text for public service counters">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231D2B64'/%3E%3Cpath d='M11 22v-9.5a1.5 1.5 0 0 1 3 0V17v-7a1.5 1.5 0 0 1 3 0v7-6a1.5 1.5 0 0 1 3 0v8l1.6-2.2a1.5 1.5 0 0 1 2.5 1.7L21 24a4 4 0 0 1-3.4 2H15a4 4 0 0 1-4-4z' fill='%23F2B705'/%3E%3C/svg%3E">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/atkinson-hyperlegible-latin-700-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="brand-name">ISL Counter</p>
+        <p class="brand-sub">Indian Sign Language to text</p>
+      </div>
+    </div>
+    <ul class="status" aria-label="System status">
+      <li id="stCamera" data-state="off"><span class="dot"></span><span class="txt">Camera off</span></li>
+      <li id="stHand" data-state="off"><span class="dot"></span><span class="txt">No hand</span></li>
+      <li id="stServer" data-state="off"><span class="dot"></span><span class="txt">Connecting</span></li>
+    </ul>
+  </header>
+
+  <main class="layout">
+    <section class="stage" aria-label="Camera">
+      <div class="video-wrap" id="videoWrap">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="start" id="startPanel">
+          <h1>Sign to the camera</h1>
+          <p>Your video stays on this device. Only the positions of your hand are sent to be recognised.</p>
+          <button class="btn btn-primary" id="startBtn" type="button">Start camera</button>
+          <p class="start-msg" id="startMsg" role="alert"></p>
+        </div>
+        <p class="reading" id="reading" aria-hidden="true"></p>
+      </div>
+
+    </section>
+
+    <section class="vocab" aria-label="Signs it knows">
+      <h2>Signs it knows</h2>
+      <ul>
+        {% for w in words %}<li>{{ w }}</li>{% endfor %}
+      </ul>
+    </section>
+
+    <aside class="side">
+      <div class="board" id="board" data-state="idle">
+        <p class="board-label">Signed word</p>
+        <p class="board-word" id="word" aria-live="polite">Waiting for a sign</p>
+        <div class="meter" aria-hidden="true"><div class="meter-fill" id="meterFill"></div></div>
+        <p class="board-meta" id="boardMeta">Hold a sign steady in view of the camera.</p>
+      </div>
+
+      <div class="convo">
+        <div class="convo-head">
+          <h2>Conversation</h2>
+          <div class="convo-actions">
+            <button class="btn btn-quiet" id="speakBtn" type="button" aria-pressed="true">Speech on</button>
+            <button class="btn btn-quiet" id="clearBtn" type="button">Clear</button>
+          </div>
+        </div>
+        <ol class="strip" id="transcript">
+          <li class="empty">Words appear here in the order they are signed.</li>
+        </ol>
+      </div>
+
+      <p class="rule" id="rule">A word is shown when it reaches 70% confidence in 10 of the last 15 readings.</p>
+    </aside>
+  </main>
+
+  <script type="module" src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
