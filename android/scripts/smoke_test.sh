@@ -61,10 +61,24 @@ sleep 8
 shot 5-resumed
 
 adb logcat -d > "$OUT/logcat.txt"
+API=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+WV=$(grep -o "ISLCounter.*WebView [^ ]* [0-9.]*" "$OUT/logcat.txt" | tail -1)
+echo "::notice title=Android API $API::${WV:-WebView version not logged}"
+note() { echo "::$1 title=$2 (API $API)::$(echo "$3" | tr '\n' ' ' | cut -c1-900)"; }
+CONSOLE=$(grep -i "chromium.*CONSOLE" "$OUT/logcat.txt" | tail -6)
+[ -n "$CONSOLE" ] && note notice "Page console" "$CONSOLE"
 FAIL=0
-if ! adb shell pidof "$PKG" >/dev/null; then echo "FAIL: app is not running"; FAIL=1; fi
-if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then echo "FAIL: app crashed"; grep -A20 "FATAL EXCEPTION" "$OUT/logcat.txt"; FAIL=1; fi
-if grep -E "Uncaught|pageerror" "$OUT/logcat.txt" | grep -i "chromium\|console" | grep -v "favicon" ; then echo "FAIL: JavaScript error in the page"; FAIL=1; fi
+if ! adb shell "ps -A 2>/dev/null || ps" | grep -q "$PKG"; then note error "App not running" "$(adb shell dumpsys activity activities | grep -m3 -i 'resumed')"; FAIL=1; fi
+if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then note error "App crashed" "$(grep -A12 'FATAL EXCEPTION' "$OUT/logcat.txt")"; FAIL=1; fi
+JSERR=$(grep -E "Uncaught" "$OUT/logcat.txt" | grep -i "chromium\|console" | grep -v "favicon" | head -5)
+if [ -n "$JSERR" ]; then
+  MAJOR=$(echo "$WV" | grep -o " [0-9]*\." | tail -1 | tr -d ' .')
+  if [ -n "$MAJOR" ] && [ "$MAJOR" -lt 90 ]; then
+    note warning "Old WebView $MAJOR: page needs 90+ (app shows the update prompt)" "$JSERR"
+  else
+    note error "JavaScript error in the page" "$JSERR"; FAIL=1
+  fi
+fi
 grep -i "chromium.*CONSOLE" "$OUT/logcat.txt" | tail -20 > "$OUT/page-console.txt" || true
 [ $FAIL -eq 0 ] && echo "PASS: app opened the site, started the camera, survived rotation and backgrounding"
 exit $FAIL

@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Insets;
@@ -18,6 +19,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -105,6 +107,7 @@ public class MainActivity extends Activity {
 
         setupWebView();
         load();
+        checkWebViewVersion();
     }
 
     @Override
@@ -255,6 +258,38 @@ public class MainActivity extends Activity {
     private void load() {
         showLoading(false);
         web.loadUrl(SITE);
+    }
+
+    // ------------------------------------------------------------------ WebView version
+    /** Hand tracking needs a modern WebView (90+, 2021). Phones that never updated it get a prompt. */
+    private void checkWebViewVersion() {
+        PackageInfo p = WebView.getCurrentWebViewPackage();
+        if (p == null || p.versionName == null) return;
+        Log.i("ISLCounter", "WebView " + p.packageName + " " + p.versionName);
+        int major;
+        try {
+            major = Integer.parseInt(p.versionName.split("\\.")[0]);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        if (major >= 90) return;
+        final String pkg = p.packageName;
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.webview_old_title)
+                .setMessage(getString(R.string.webview_old_body, p.versionName))
+                .setPositiveButton(R.string.update, (d, w) -> openStore(pkg))
+                .setNegativeButton(R.string.not_now, null)
+                .show();
+    }
+
+    private void openStore(String pkg) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + pkg)));
+        } catch (ActivityNotFoundException e) {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + pkg)));
+            } catch (ActivityNotFoundException ignored) { }
+        }
     }
 
     // ------------------------------------------------------------------ camera permission

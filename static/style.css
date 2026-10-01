@@ -67,7 +67,7 @@ button { font: inherit; }
 .status [data-state="on"] .dot { background: var(--go); }
 .status [data-state="warn"] .dot { background: var(--signal); }
 .status [data-state="error"] .dot { background: var(--stop); }
-.status [data-state="error"] { color: var(--stop); border-color: color-mix(in srgb, var(--stop) 35%, var(--line)); }
+.status [data-state="error"] { color: var(--stop); border-color: #EBB5B5; }
 
 /* ---------- layout ---------- */
 .layout {
@@ -100,14 +100,14 @@ button { font: inherit; }
   background: #1A2033;
 }
 .video-wrap video, .video-wrap canvas {
-  position: absolute; inset: 0;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   width: 100%; height: 100%;
   transform: scaleX(-1);           /* selfie view; landmarks use the raw frame */
 }
 .video-wrap video { object-fit: cover; }
 
 .start {
-  position: absolute; inset: 0;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; padding: 24px; text-align: center;
   color: #fff;

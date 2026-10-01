@@ -162,9 +162,15 @@ els.speakBtn.addEventListener("click", () => {
 // ------------------------------------------------------------------ transcript
 const transcript = [];
 function renderTranscript() {
-  els.transcript.replaceChildren(...(transcript.length
-    ? transcript.map((w) => Object.assign(document.createElement("li"), { textContent: w }))
-    : [Object.assign(document.createElement("li"), { className: "empty", textContent: "Words appear here in the order they are signed." })]));
+  // (plain DOM calls so it also works in older Android WebViews)
+  els.transcript.textContent = "";
+  const items = transcript.length ? transcript : [null];
+  for (const w of items) {
+    const li = document.createElement("li");
+    if (w === null) { li.className = "empty"; li.textContent = "Words appear here in the order they are signed."; }
+    else li.textContent = w;
+    els.transcript.appendChild(li);
+  }
 }
 els.clearBtn.addEventListener("click", () => { transcript.length = 0; renderTranscript(); });
 
@@ -358,11 +364,24 @@ function syncVideoSize() {
   if (els.canvas.width !== w || els.canvas.height !== h) { els.canvas.width = w; els.canvas.height = h; }
   els.wrap.style.aspectRatio = `${w} / ${h}`;
   els.wrap.style.setProperty("--ar", (w / h).toFixed(4));
+  fitOldEngines();
   els.wrap.classList.toggle("is-portrait", h > w);
   setStatus(els.stCamera, "on", `Camera ${Math.min(w, h)}p`);
 }
 els.video.addEventListener("resize", syncVideoSize);
 els.video.addEventListener("loadedmetadata", syncVideoSize);
+
+// Engines without CSS aspect-ratio (Android WebView before 88): size the box in script.
+const NO_ASPECT = !(window.CSS && CSS.supports && CSS.supports("aspect-ratio", "1 / 1"));
+function fitOldEngines() {
+  if (!NO_ASPECT) return;
+  const w = els.video.videoWidth || 16, h = els.video.videoHeight || 9;
+  const maxH = window.innerHeight * 0.6, avail = els.wrap.parentElement.clientWidth;
+  const width = Math.min(avail, maxH * w / h);
+  els.wrap.style.width = `${width}px`;
+  els.wrap.style.height = `${width * h / w}px`;
+}
+if (NO_ASPECT) { window.addEventListener("resize", fitOldEngines); fitOldEngines(); }
 
 async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
