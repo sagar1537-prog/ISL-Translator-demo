@@ -67,7 +67,7 @@ button { font: inherit; }
 .status [data-state="on"] .dot { background: var(--go); }
 .status [data-state="warn"] .dot { background: var(--signal); }
 .status [data-state="error"] .dot { background: var(--stop); }
-.status [data-state="error"] { color: var(--stop); border-color: color-mix(in srgb, var(--stop) 35%, var(--line)); }
+.status [data-state="error"] { color: var(--stop); border-color: #EBB5B5; }
 
 /* ---------- layout ---------- */
 .layout {
@@ -90,19 +90,24 @@ button { font: inherit; }
 .video-wrap {
   position: relative;
   aspect-ratio: 16 / 9;
+  /* never taller than the space available: a portrait phone camera would otherwise fill
+     the whole screen. The width follows the video's own shape (--ar = width / height). */
+  --max-h: 62vh;
+  width: min(100%, calc(var(--max-h) * var(--ar, 1.7778)));
+  margin-inline: auto;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: #1A2033;
 }
 .video-wrap video, .video-wrap canvas {
-  position: absolute; inset: 0;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   width: 100%; height: 100%;
   transform: scaleX(-1);           /* selfie view; landmarks use the raw frame */
 }
 .video-wrap video { object-fit: cover; }
 
 .start {
-  position: absolute; inset: 0;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; padding: 24px; text-align: center;
   color: #fff;
@@ -120,7 +125,10 @@ button { font: inherit; }
   background: rgba(18, 26, 51, .72); color: #fff;
   font-size: .875rem;
   backdrop-filter: blur(6px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: calc(100% - 24px);
 }
+@media (max-width: 380px) { .reading { left: 10px; bottom: 10px; font-size: .75rem; padding: 4px 10px; } }
 .reading:empty { display: none; }
 
 .vocab h2 { font-size: 1rem; margin-bottom: 10px; }
@@ -177,7 +185,7 @@ button { font: inherit; }
   border-radius: var(--radius-lg);
   padding: 18px 20px 20px;
 }
-.convo-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.convo-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .convo-head h2 { font-size: 1.125rem; }
 .convo-actions { display: flex; gap: 8px; }
 
@@ -194,6 +202,7 @@ button { font: inherit; }
 /* ---------- buttons ---------- */
 .btn {
   border: 0; cursor: pointer;
+  white-space: nowrap;
   border-radius: var(--radius-sm);
   padding: 10px 16px;
   font-weight: 700;
@@ -215,6 +224,46 @@ button { font: inherit; }
 @media (max-width: 520px) {
   .status li { padding: 5px 10px; font-size: .8125rem; }
   .board { padding: 18px 18px 20px; }
+}
+/* Phones and small tablets held sideways: camera and word board side by side, no wasted height */
+@media (orientation: landscape) and (max-height: 560px) {
+  .topbar { padding-top: 8px; padding-bottom: 8px; }
+  .brand-mark { width: 32px; height: 32px; border-radius: 9px; }
+  .brand-name { font-size: 1.0625rem; }
+  .brand-sub { display: none; }
+  .layout {
+    grid-template-columns: minmax(0, 1.35fr) minmax(240px, 1fr);
+    grid-template-areas: "stage side" "vocab side";
+    gap: 12px; row-gap: 12px;
+    padding-bottom: 16px;
+  }
+  .video-wrap { --max-h: calc(100vh - 76px); border-radius: 14px; }
+  .board { min-height: 0; padding: 14px 16px 16px; border-radius: 14px; }
+  .board-word { font-size: clamp(1.75rem, 5.5vh, 2.75rem); margin: 4px 0 10px; }
+  .board[data-state="idle"] .board-word { font-size: clamp(1.25rem, 4vh, 1.75rem); }
+  .board-meta { font-size: .875rem; margin-top: 8px; }
+  .convo { padding: 12px 14px 14px; border-radius: 14px; }
+  .convo-head { margin-bottom: 8px; }
+  .convo-head h2 { font-size: 1rem; }
+  .btn-quiet { padding: 6px 10px; font-size: .875rem; }
+  .strip li { padding: 6px 10px; font-size: .9375rem; }
+  .start h1 { font-size: 1.5rem; }
+  .start p { font-size: .875rem; }
+  .btn-primary { padding: 10px 20px; }
+  .side { gap: 10px; }
+}
+/* Upright phones: the camera is as big as possible while the word board stays on screen */
+@media (orientation: portrait) and (max-width: 600px) {
+  .video-wrap { --max-h: min(58vh, calc(100vh - 300px)); }
+  .video-wrap.is-portrait { --max-h: min(52vh, calc(100vh - 300px)); }
+}
+@media (max-width: 380px) {
+  .topbar { padding-top: 10px; padding-bottom: 10px; gap: 10px; }
+  .brand-mark { width: 34px; height: 34px; border-radius: 9px; }
+  .brand-sub { display: none; }
+  .status { gap: 6px; }
+  .status li { padding: 4px 9px; font-size: .75rem; gap: 6px; }
+  .board { padding: 16px 16px 18px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .board-word.flip { animation: none; }

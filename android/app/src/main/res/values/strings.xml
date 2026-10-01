@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ISL Counter</string>
+    <string name="loading">Opening ISL Counter…</string>
+    <string name="waking">Waking up the server. The first visit after a quiet spell can take up to a minute.</string>
+    <string name="offline_title">Can\'t reach ISL Counter</string>
+    <string name="offline_body">Check that the phone is connected to the internet, then try again.</string>
+    <string name="retry">Try again</string>
+    <string name="camera_needed_title">Camera permission is off</string>
+    <string name="camera_needed_body">ISL Counter needs the camera to see your signs. Turn on Camera in the app\'s permissions.</string>
+    <string name="open_settings">Open settings</string>
+    <string name="not_now">Not now</string>
+    <string name="webview_old_title">Update Android System WebView</string>
+    <string name="webview_old_body">Hand tracking needs a newer version of Android System WebView (this phone has %1$s). Update it from Google Play, then reopen ISL Counter.</string>
+    <string name="update">Update</string>
+</resources>
