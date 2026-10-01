@@ -2,6 +2,7 @@
 // Webcam -> MediaPipe HandLandmarker (in the page) -> smoothing + hand tracking
 // -> /api/predict (server classifier) -> voting -> word board, transcript, speech.
 import { FilesetResolver, HandLandmarker } from "./vendor/mediapipe/vision_bundle.mjs";
+import { LocalModel, features } from "./engine.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -89,32 +90,56 @@ function area(p) {
 
 // ------------------------------------------------------------------ voting
 class Voter {
-  constructor(size, need) { this.size = size; this.need = Math.min(need, size); this.buf = []; }
+  // A word is shown when it wins `need` of the last `size` readings, or at once when
+  // `fastRun` identical readings in a row are each at least `fastConf` confident.
+  constructor(size, need, fastRun, fastConf) {
+    Object.assign(this, { size, need: Math.min(need, size), fastRun, fastConf, buf: [] });
+  }
   push(v) { this.buf.push(v); if (this.buf.length > this.size) this.buf.shift(); }
   result() {
+    const b = this.buf;
+    if (this.fastRun && b.length >= this.fastRun) {
+      const tail = b.slice(-this.fastRun), l = tail[0] && tail[0].label;
+      if (l && tail.every((v) => v && v.label === l && v.confidence >= this.fastConf))
+        return { label: l, confidence: tail.reduce((s, v) => s + v.confidence, 0) / tail.length };
+    }
     const count = new Map();
-    for (const v of this.buf) if (v) count.set(v.label, (count.get(v.label) || 0) + 1);
+    for (const v of b) if (v) count.set(v.label, (count.get(v.label) || 0) + 1);
     let best = null, n = 0;
     for (const [l, c] of count) if (c > n) { best = l; n = c; }
     if (!best || n < this.need) return null;
-    const confs = this.buf.filter((v) => v && v.label === best).map((v) => v.confidence);
-    return { label: best, confidence: confs.reduce((a, b) => a + b, 0) / confs.length };
+    const confs = b.filter((v) => v && v.label === best).map((v) => v.confidence);
+    return { label: best, confidence: confs.reduce((x, y) => x + y, 0) / confs.length };
   }
 }
 
 // ------------------------------------------------------------------ speech
 const speech = {
-  on: "speechSynthesis" in window, last: {},
-  say(text) {
+  on: "speechSynthesis" in window, voice: null,
+  pickVoice() {
+    // Prefer a voice installed on the device: online ("Google ...") voices stream the
+    // audio first and add a noticeable delay before the word is heard.
+    const vs = speechSynthesis.getVoices();
+    const rank = (v) => (v.localService ? 0 : 10) + (/^en-IN/i.test(v.lang) ? 0 : /^en/i.test(v.lang) ? 1 : 5);
+    this.voice = vs.length ? [...vs].sort((a, b) => rank(a) - rank(b))[0] : null;
+  },
+  prime() {                       // warm up the speech engine while the camera is starting
     if (!this.on) return;
-    const now = performance.now();
-    if (this.last[text] && now - this.last[text] < 3000) return;
-    this.last[text] = now;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.rate = 0.95; u.lang = "en-IN";
-    speechSynthesis.speak(u);
+    this.pickVoice();
+    const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u);
+  },
+  say(text) {                     // speaks immediately; the caller decides when a word is new
+    if (!this.on) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.05;
+    if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else u.lang = "en-IN";
+    if (speechSynthesis.speaking || speechSynthesis.pending) {
+      speechSynthesis.cancel();   // drop a previous word that is still playing
+      setTimeout(() => speechSynthesis.speak(u), 0);
+    } else speechSynthesis.speak(u);
   },
 };
+if ("speechSynthesis" in window) { speechSynthesis.addEventListener("voiceschanged", () => speech.pickVoice()); speech.pickVoice(); }
 if (!("speechSynthesis" in window)) { els.speakBtn.disabled = true; els.speakBtn.textContent = "No speech"; }
 els.speakBtn.addEventListener("click", () => {
   speech.on = !speech.on;
@@ -156,11 +181,35 @@ function showWord(stable, raw) {
 }
 
 // ------------------------------------------------------------------ prediction
-let voter, inFlight = false, lastRaw = null, handVisible = false, announced = null;
+let voter, inFlight = false, lastRaw = null, handVisible = false, announced = null, quietFrames = 0;
 let seq = [];
 let latencyAvg = 0, serverOk = null;
+let local = null;                  // LocalModel when recognition runs in the browser
 
-async function predict(hand) {
+function record(r) {
+  lastRaw = r;
+  voter.push(r.accepted ? r : null);
+  els.reading.textContent = handVisible ? `Reading: ${cfg.display[r.label]} ${Math.round(r.confidence * 100)}%` : "";
+}
+
+function predictLocal(hand) {
+  const w = els.video.videoWidth, h = els.video.videoHeight;
+  const f = features(hand.pts, hand.isLeft, w, h, local.feature);
+  let p;
+  if (local.window) {
+    seq.push(f); if (seq.length > local.window) seq.shift();
+    if (seq.length < local.window) return false;
+    p = local.probs(seq);
+  } else p = local.probs(f);
+  const order = p.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 3);
+  const [conf, idx] = order[0], label = local.labels[idx];
+  record({ label, confidence: conf, accepted: conf >= cfg.threshold && label !== cfg.none_label,
+           top: order.map(([c, i]) => ({ label: local.labels[i], confidence: c })) });
+  return true;
+}
+
+// Fallback when the model can't run in the page: ask the server (one request at a time).
+async function predictRemote(hand) {
   const body = { is_left: hand.isLeft, width: els.video.videoWidth, height: els.video.videoHeight };
   const pts = Array.from({ length: 21 }, (_, i) => [hand.pts[i*3], hand.pts[i*3+1], hand.pts[i*3+2]]);
   if (cfg.window) {
@@ -179,9 +228,7 @@ async function predict(hand) {
     latencyAvg = latencyAvg ? 0.85 * latencyAvg + 0.15 * ms : ms;
     if (serverOk !== true || Math.random() < 0.1) setStatus(els.stServer, "on", `Server ${Math.round(latencyAvg)} ms`);
     serverOk = true;
-    lastRaw = r;
-    voter.push(r.accepted ? r : null);
-    els.reading.textContent = handVisible ? `Reading: ${cfg.display[r.label]} ${Math.round(r.confidence * 100)}%` : "";
+    record(r);
   } catch (err) {
     if (serverOk !== false) setStatus(els.stServer, "error", "Server offline");
     serverOk = false;
@@ -194,8 +241,9 @@ async function predict(hand) {
 
 function afterVote() {
   const stable = voter.result();
-  if (!stable) announced = null;
-  else if (stable.label !== announced) {
+  if (!stable) { if (++quietFrames >= 4) announced = null; }   // re-arm once the sign has really gone
+  else quietFrames = 0;
+  if (stable && stable.label !== announced) {
     announced = stable.label;
     transcript.push(cfg.display[stable.label]);
     if (transcript.length > 30) transcript.shift();
@@ -247,8 +295,10 @@ function loop() {
     const { hands, primary } = tracker.update(dets, now / 1000);
     handVisible = !!primary;
     setStatus(els.stHand, primary ? "on" : "off", primary ? (primary.isLeft ? "Left hand" : "Right hand") : "No hand");
-    if (primary) { if (!inFlight) predict(primary).then(afterVote); }
-    else { voter.push(null); seq = []; els.reading.textContent = ""; afterVote(); }
+    if (primary) {
+      if (local) { predictLocal(primary); afterVote(); }
+      else if (!inFlight) predictRemote(primary).then(afterVote);
+    } else { voter.push(null); seq = []; els.reading.textContent = ""; afterVote(); }
     draw(hands, primary);
   }
   if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) v.requestVideoFrameCallback(loop);
@@ -260,9 +310,15 @@ async function loadConfig() {
   try {
     const res = await fetch("api/config");
     cfg = await res.json();
-    voter = new Voter(cfg.buffer, cfg.votes);
-    els.rule.textContent = `A word is shown when it reaches ${Math.round(cfg.threshold * 100)}% confidence in ${cfg.votes} of the last ${cfg.buffer} readings.`;
-    setStatus(els.stServer, "on", "Server ready");
+    voter = new Voter(cfg.buffer, cfg.votes, cfg.fast_run, cfg.fast_conf);
+    els.rule.textContent = `A word is shown when it reaches ${Math.round(cfg.threshold * 100)}% confidence in ${cfg.votes} of the last ${cfg.buffer} readings, or in ${cfg.fast_run} in a row at ${Math.round(cfg.fast_conf * 100)}%.`;
+    try {                               // recognition runs in the browser: no network wait per reading
+      local = new LocalModel(await (await fetch("api/model")).json());
+      setStatus(els.stServer, "on", "On-device");
+    } catch (e) {
+      console.warn("on-device model unavailable, using the server:", e);
+      setStatus(els.stServer, "on", "Server ready");
+    }
     serverOk = true;
   } catch {
     setStatus(els.stServer, "error", "Server offline");
@@ -304,12 +360,16 @@ async function startCamera() {
   stream.getVideoTracks()[0].addEventListener("ended", () => setStatus(els.stCamera, "error", "Camera disconnected"));
 }
 
+let landmarkerLoading = null;       // started when the page opens, so Start camera is quick
+function preload() { landmarkerLoading = loadLandmarker().then((l) => (landmarker = l), () => { landmarkerLoading = null; }); }
+
 els.startBtn.addEventListener("click", async () => {
   els.startBtn.disabled = true; els.startMsg.textContent = "";
   try {
     els.startBtn.textContent = "Loading hand tracking…";
     if (!cfg) await loadConfig();
-    if (!landmarker) landmarker = await loadLandmarker();
+    speech.prime();
+    if (!landmarker) { if (landmarkerLoading) await landmarkerLoading; if (!landmarker) landmarker = await loadLandmarker(); }
     els.startBtn.textContent = "Starting camera…";
     await startCamera();
     els.startPanel.hidden = true;
@@ -322,4 +382,5 @@ els.startBtn.addEventListener("click", async () => {
 });
 
 loadConfig().catch(() => {});
+preload();
 renderTranscript();

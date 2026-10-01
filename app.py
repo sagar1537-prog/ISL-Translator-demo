@@ -15,8 +15,10 @@ Deploy:  gunicorn app:app        (see README.md)
 Settings (environment variables, all optional)
     ISL_MODEL       path to the model file          (default: model/isl_model.npz)
     ISL_THRESHOLD   minimum confidence per frame    (default: 0.70)
-    ISL_BUFFER      predictions in the voting window (default: 15)
-    ISL_VOTES       votes needed to accept a word   (default: 10)
+    ISL_BUFFER      readings in the voting window   (default: 9)
+    ISL_VOTES       votes needed to accept a word   (default: 6)
+    ISL_FAST_RUN    express lane: identical readings in a row (default: 4)
+    ISL_FAST_CONF   ... each at least this confident (default: 0.92)
     PORT            port to listen on               (default: 5000)
 """
 from __future__ import annotations
@@ -24,6 +26,10 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
+
+import base64
+import gzip
+import threading
 
 import numpy as np
 from flask import Flask, jsonify, render_template, request
@@ -35,8 +41,11 @@ HERE = Path(__file__).resolve().parent
 
 MODEL_PATH = Path(os.environ.get("ISL_MODEL", HERE / "model" / "isl_model.npz"))
 THRESHOLD = float(os.environ.get("ISL_THRESHOLD", "0.70"))
-VOTE_BUFFER = int(os.environ.get("ISL_BUFFER", "15"))
-VOTES_NEEDED = int(os.environ.get("ISL_VOTES", "10"))
+VOTE_BUFFER = int(os.environ.get("ISL_BUFFER", "9"))
+VOTES_NEEDED = int(os.environ.get("ISL_VOTES", "6"))
+# Express lane: this many identical readings in a row, each at >= FAST_CONF, show the word at once.
+FAST_RUN = int(os.environ.get("ISL_FAST_RUN", "4"))
+FAST_CONF = float(os.environ.get("ISL_FAST_CONF", "0.92"))
 
 # How each label is shown and spoken. Labels not listed are shown as-is.
 DISPLAY_NAMES = {
@@ -96,10 +105,43 @@ def config():
         "threshold": THRESHOLD,
         "buffer": VOTE_BUFFER,
         "votes": VOTES_NEEDED,
+        "fast_run": FAST_RUN,
+        "fast_conf": FAST_CONF,
         "window": WINDOW,
         "model": {"type": model.arch["type"],
                   "accuracy": model.metrics.get("take_accuracy")},
     })
+
+
+def _b64(a: np.ndarray) -> str:
+    return base64.b64encode(np.ascontiguousarray(a, dtype="<f4").tobytes()).decode("ascii")
+
+
+def _model_spec() -> dict:
+    """The model weights for in-browser recognition (float32, base64)."""
+    spec = {"arch": model.arch, "labels": model.labels, "feature": model.feature}
+    if model.arch["type"] == "mlp":
+        spec["layers"] = [{"w": _b64(w), "b": _b64(b), "n": int(w.shape[0]), "m": int(w.shape[1])}
+                          for w, b in model._layers]
+    else:
+        spec["gru"] = [{"wih": _b64(a), "whh": _b64(b), "bih": _b64(c), "bhh": _b64(d),
+                        "n": int(a.shape[0]), "h": int(b.shape[0])} for a, b, c, d in model._gru]
+        w, b = model._head
+        spec["head"] = {"w": _b64(w), "b": _b64(b), "n": int(w.shape[0]), "m": int(w.shape[1])}
+    return spec
+
+
+_MODEL_JSON = None
+
+
+@app.get("/api/model")
+def model_weights():
+    global _MODEL_JSON
+    if _MODEL_JSON is None:
+        _MODEL_JSON = app.json.dumps(_model_spec())
+    resp = app.response_class(_MODEL_JSON, mimetype="application/json")
+    resp.headers["Cache-Control"] = "no-cache"   # revalidated; a new model file takes effect on restart
+    return resp
 
 
 @app.post("/api/predict")
@@ -142,11 +184,39 @@ def health():
     return jsonify(ok=True, words=len(model.labels))
 
 
+_GZ_CACHE: dict = {}
+_GZ_LOCK = threading.Lock()
+_COMPRESSIBLE = (".js", ".mjs", ".css", ".wasm", ".json", ".task", ".svg")
+
+
 @app.after_request
 def headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    if request.path.startswith("/static/"):
-        resp.headers["Cache-Control"] = "public, max-age=86400"
+    path = request.path
+    if path.startswith("/static/"):
+        # Bundled libraries, fonts and the hand model never change: cache for a week.
+        # The app's own files are revalidated (cheap 304) so an update shows up immediately.
+        if path.startswith(("/static/vendor/", "/static/fonts/", "/static/models/")):
+            resp.headers["Cache-Control"] = "public, max-age=604800, immutable"
+        else:
+            resp.headers["Cache-Control"] = "no-cache"
+        # gzip once per file and keep it in memory: the 11 MB MediaPipe engine becomes ~3.5 MB.
+        if (resp.status_code == 200 and path.endswith(_COMPRESSIBLE)
+                and "gzip" in request.headers.get("Accept-Encoding", "")
+                and "Content-Encoding" not in resp.headers):
+            etag = resp.headers.get("ETag", "")
+            key = (path, etag)
+            with _GZ_LOCK:
+                data = _GZ_CACHE.get(key)
+                if data is None:
+                    resp.direct_passthrough = False
+                    data = gzip.compress(resp.get_data(), compresslevel=6)
+                    _GZ_CACHE[key] = data
+            resp.direct_passthrough = False
+            resp.set_data(data)
+            resp.headers["Content-Encoding"] = "gzip"
+            resp.headers["Vary"] = "Accept-Encoding"
+            resp.headers["Content-Length"] = str(len(data))
     return resp
 
 
