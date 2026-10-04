@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+model/dataset_cache.pkl
+model/*.pt
+dataset_path.txt
+static/models/pose_landmarker_lite.task
