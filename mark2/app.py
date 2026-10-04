@@ -9,7 +9,7 @@ asks a local LLM (Ollama) to polish sentences and the summary.
 
 Optional settings (environment variables)
     PORT / HOST            where to listen (default 8000 / 127.0.0.1)
-    ISL_THRESHOLD          confidence needed for a word (default 0.55)
+    ISL_THRESHOLD          confidence needed for a word (default 0.70)
     ISL_LLM_MODEL          an Ollama model name, e.g. llama3.2:3b, to polish the English
     OLLAMA_URL             default http://127.0.0.1:11434
 """
@@ -55,7 +55,7 @@ def config():
     return jsonify({
         "model": model_info(),
         "pose": POSE_TASK.is_file(),
-        "threshold": float(os.environ.get("ISL_THRESHOLD", "0.55")),
+        "threshold": float(os.environ.get("ISL_THRESHOLD", "0.70")),
         "llm": bool(LLM_MODEL),
     })
 

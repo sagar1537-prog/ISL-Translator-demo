@@ -11,8 +11,8 @@ self.onmessage = (e) => {
     const T = model.T, F = model.F, frames = new Array(T);
     for (let t = 0; t < T; t++) frames[t] = m.data.subarray(t * F, (t + 1) * F);
     const p = model.probs(frames);
-    let best = 0; for (let i = 1; i < p.length; i++) if (p[i] > p[best]) best = i;
-    let second = best === 0 ? 1 : 0; for (let i = 0; i < p.length; i++) if (i !== best && p[i] > p[second]) second = i;
-    self.postMessage({ type: "result", id: m.id, scale: m.scale, best, p: p[best], second, p2: p[second], ms: performance.now() - t0 });
+    const top = Array.from(p.keys()).sort((a, b) => p[b] - p[a]).slice(0, 3);
+    self.postMessage({ type: "result", id: m.id, scale: m.scale, best: top[0], p: p[top[0]],
+                       top: top.map((i) => [i, p[i]]), ms: performance.now() - t0 });
   }
 };

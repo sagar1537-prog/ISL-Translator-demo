@@ -14,6 +14,7 @@ const els = {
   sentence: $("sentence"), gloss: $("gloss"), summary: $("summary"), topics: $("topics"), history: $("history"),
   speakBtn: $("speakBtn"), clearBtn: $("clearBtn"), sens: $("sens"), sensVal: $("sensVal"), perf: $("perf"),
   stCam: $("stCam"), stHands: $("stHands"), stModel: $("stModel"),
+  frameHint: $("frameHint"), guesses: $("guesses"), testMode: $("testMode"),
 };
 const ctx = els.overlay.getContext("2d");
 const status = (el, s, text) => { el.dataset.s = s; el.querySelector("span").textContent = text; };
@@ -195,7 +196,22 @@ els.clearBtn.addEventListener("click", () => {
 
 // ------------------------------------------------------------------ word decoder (continuous signing)
 const dec = { recent: [], lastLabel: null, lastAt: 0, released: true, quiet: 0 };
+let testMode = false;
+function showGuesses(r, none) {
+  if (!testMode) return;
+  els.guesses.textContent = "";
+  for (const [i, p] of r.top || []) {
+    const li = document.createElement("li");
+    const name = spec.display[spec.labels[i]] || "(none: resting / between signs)";
+    li.innerHTML = `<b></b><span></span>`;
+    li.firstChild.textContent = `${Math.round(p * 100)}%`;
+    li.lastChild.textContent = name;
+    if (p < threshold || spec.labels[i] === "none") li.className = "low";
+    els.guesses.appendChild(li);
+  }
+}
 function onResult(r) {
+  if (r.top) showGuesses(r);
   const none = spec.labels[r.best] === "none" || r.p < threshold;
   els.meter.style.width = `${Math.round((none ? 0 : r.p) * 100)}%`;
   if (none) {
@@ -210,7 +226,8 @@ function onResult(r) {
   const now = performance.now() / 1000;
   if (votes >= 2 || r.p >= 0.9) {
     const repeat = label === dec.lastLabel;
-    if (!repeat || (dec.released && now - dec.lastAt > 0.6)) {
+    const inSentence = current.some((t) => t.label === label);
+    if ((!repeat && !inSentence) || (dec.released && now - dec.lastAt > 1.5 && !inSentence)) {
       addWord(label, r.p);
       dec.lastLabel = label; dec.lastAt = now; dec.released = false;
     }
@@ -278,6 +295,14 @@ function loop() {
     const aspect = v.videoWidth / v.videoHeight;
     buffer.push({ t: now, f: frameFeatures(right, left, lastPose, aspect) });
     while (buffer.length && buffer[0].t < now - 2.5) buffer.shift();
+    // framing check: the model needs your head and shoulders in view
+    if (frameNo % 15 === 0) {
+      const msg = !lastPose ? "Move back or tilt the camera down: your head and both shoulders must be in view."
+        : lastPose[1][1] > 0.92 || lastPose[2][1] > 0.92 ? "Tilt the camera down a little: your shoulders are at the edge."
+        : null;
+      els.frameHint.hidden = !msg || !pose;
+      if (msg) els.frameHint.textContent = msg;
+    }
     status(els.stHands, hs.length ? "on" : "off", hs.length === 2 ? "Both hands" : hs.length ? (hs[0].isLeft ? "Left hand" : "Right hand") : "No hands");
     draw(hs, lastPose);
     stage.setHands(hs.map((h) => h.pts), aspect);
@@ -353,6 +378,7 @@ document.addEventListener("visibilitychange", async () => {
   try { await startCamera(); } catch { status(els.stCam, "bad", "Camera off"); }
 });
 
+els.testMode.addEventListener("change", () => { testMode = els.testMode.checked; els.guesses.hidden = !testMode; });
 els.sens.addEventListener("input", () => { threshold = Number(els.sens.value); els.sensVal.textContent = `${Math.round(threshold * 100)}%`; });
 
 // subtle 3D tilt of the camera card following the pointer

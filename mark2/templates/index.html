@@ -31,6 +31,8 @@
         <div class="video-box" id="videoBox">
           <video id="video" playsinline muted></video>
           <canvas id="overlay"></canvas>
+          <p class="frame-hint" id="frameHint" hidden></p>
+          <ol class="guesses" id="guesses" hidden aria-label="Model's top guesses"></ol>
           <div class="gate" id="gate">
             <h1>Sign a sentence</h1>
             <p>Sign at your natural speed. A short pause ends the sentence. Video stays on this computer.</p>
@@ -76,10 +78,11 @@
 
   <footer class="foot">
     <label class="sens">Sensitivity
-      <input type="range" id="sens" min="0.35" max="0.85" step="0.05" value="0.55" aria-describedby="sensHelp">
-      <span id="sensVal">55%</span>
+      <input type="range" id="sens" min="0.40" max="0.95" step="0.05" value="0.70" aria-describedby="sensHelp">
+      <span id="sensVal">70%</span>
     </label>
     <p id="sensHelp" class="muted small">Lower shows words sooner; higher makes fewer mistakes.</p>
+    <label class="sens testtoggle"><input type="checkbox" id="testMode"> Test mode</label>
     <p class="muted small" id="perf"></p>
   </footer>
 

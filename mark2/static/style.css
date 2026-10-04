@@ -77,6 +77,17 @@ button, input { font: inherit; }
 .gate-msg:empty { display: none; }
 .gate-msg { color: #FFD9D6 !important; }
 
+.frame-hint { position: absolute; z-index: 1; left: 50%; top: 14px; transform: translateX(-50%); margin: 0;
+  max-width: calc(100% - 28px); padding: 8px 14px; border-radius: 12px; background: rgba(210, 66, 59, .92); color: #fff;
+  font-size: .875rem; font-weight: 600; text-align: center; }
+.frame-hint[hidden], .guesses[hidden] { display: none; }
+.guesses { position: absolute; z-index: 1; right: 12px; bottom: 12px; margin: 0; padding: 10px 12px; list-style: none;
+  border-radius: 12px; background: rgba(14, 20, 48, .82); color: #fff; font-size: .875rem; min-width: 200px; }
+.guesses li { display: flex; gap: 10px; }
+.guesses b { width: 3.2em; text-align: right; color: var(--saffron); }
+.guesses li.low { opacity: .55; }
+.sens.testtoggle input { width: auto; margin: 0; }
+
 /* ---------- 3D stage ---------- */
 .stage { position: relative; border-radius: var(--r-xl); overflow: hidden; min-height: 300px;
   background: linear-gradient(160deg, #FFFFFF 0%, #EEF1FF 100%); box-shadow: var(--shadow); }

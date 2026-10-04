@@ -48,7 +48,8 @@ export function toEnglish(tokens) {
     else rest.push(t);
   }
   // collapse immediate repeats (signers repeat for emphasis)
-  const toks = rest.filter((t, i) => i === 0 || t.label !== rest[i - 1].label);
+  const seen = new Set();
+  const toks = rest.filter((t) => !seen.has(t.label) && seen.add(t.label));   // each sign once per sentence
   if (!toks.length) return { english: out.join(" "), parts: {} };
 
   let subj = null;
@@ -113,9 +114,10 @@ export function summarize(history) {
     const body = h.english.replace(/^(Hello|Thank you|Good (morning|afternoon|evening|night)|All right|Pleased to meet you)\.\s*/g, "")
       .replace(/How are you\?\s*/, "");
     if (!body) continue;
-    lines.push(body
+    const line = (body
       .replace(/\bI am\b/g, "they are").replace(/\bI need\b/g, "they need").replace(/\bI\b/g, "they")
       .replace(/\b[Mm]y\b/g, "their").replace(/^(they|their)/, (m) => cap(m)));
+    if (!lines.includes(line)) lines.push(line);
   }
   const topics = new Set();
   for (const h of history) for (const t of h.tokens) {
