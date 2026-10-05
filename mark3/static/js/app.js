@@ -319,9 +319,11 @@ function loop() {
 
 // ------------------------------------------------------------------ Teach mode: record your own takes
 // library format for the avatar: origin = middle of the shoulders, unit = shoulder width, y down
+// shoulders of a typical upright webcam framing, used when body tracking is unavailable
+const DEFAULT_POSE = [[0.5, 0.28], [0.62, 0.52], [0.38, 0.52], [0.68, 0.72], [0.32, 0.72], [0.62, 0.9], [0.38, 0.9]];
 function libraryFrame(raw) {
-  const { right, left, pose: p, aspect: a } = raw;
-  if (!p) return null;
+  const { right, left, aspect: a } = raw;
+  const p = raw.pose || DEFAULT_POSE;
   const sx = (p[1][0] + p[2][0]) / 2 * a, sy = (p[1][1] + p[2][1]) / 2;
   const s = Math.hypot((p[1][0] - p[2][0]) * a, p[1][1] - p[2][1]); if (s < 1e-4) return null;
   const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -408,6 +410,9 @@ let lastItems = [];
 function renderE2S(items, active, okFlags) {
   els.e2sGloss.textContent = "";
   items.forEach((it, i) => {
+    if (i > 0 && it.clause !== undefined && it.clause !== items[i - 1].clause) {
+      const sep = document.createElement("li"); sep.className = "sep"; sep.setAttribute("aria-hidden", "true"); els.e2sGloss.appendChild(sep);
+    }
     const li = document.createElement("li");
     li.textContent = it.kind === "sign" ? it.text : it.text;
     li.className = it.kind === "sign" && (!okFlags || okFlags[i]) ? "sign" : "spell";

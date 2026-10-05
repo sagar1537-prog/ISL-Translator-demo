@@ -103,6 +103,7 @@ body[data-mode="teach"] .teach { display: block; }
 .e2s-gloss li.sign { background: #EEF1FF; color: var(--lapis-deep); cursor: pointer; text-transform: uppercase; letter-spacing: .02em; }
 .e2s-gloss li.spell { background: none; border: 1px dashed #B9C1DA; color: var(--slate); }
 .e2s-gloss li.now { background: var(--saffron); color: var(--ink); transform: translateY(-2px); transition: transform .15s; }
+.e2s-gloss li.sep { width: 2px; padding: 0; margin: 4px 6px; border-radius: 2px; background: var(--mist); }
 .e2s-gloss li.empty { font-weight: 400; padding: 8px 0; }
 .e2s-tools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 14px 0 10px; }
 .ghost { background: var(--porcelain); color: var(--ink); padding: 9px 16px; border: 1px solid var(--mist); }

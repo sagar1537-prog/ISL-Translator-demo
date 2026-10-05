@@ -29,6 +29,8 @@ const SYNONYMS = {
   race: "raceethnicity", ethnicity: "raceethnicity", "store or shop": "storeorshop",
 };
 
+const QUESTION = new Set(["what", "where", "when", "who", "why", "how", "which", "whose"]);
+const NEGATION = new Set(["not", "no", "never", "dont", "doesnt", "didnt", "cant", "cannot", "wont", "isnt", "arent", "wasnt"]);
 const DROP = new Set(("a an the is am are was were be been being to of do does did will would shall should can could may " +
   "might must has have had and or but so very just really please much many lot lots too also quite  that this these those there here it's i'm you're " +
   "he's she's we're they're im youre for with at in on into from by as about want wants wanted need needs needed go goes going went gone get gets got getting").split(" "));
@@ -64,11 +66,26 @@ export class EnglishToISL {
     return null;
   }
 
-  /** "I need a train ticket for tomorrow" -> [{label, text, kind}] in ISL order */
+  /** "Good morning. I need a train ticket for tomorrow" -> [{label, text, kind, clause}] in ISL order.
+   *  ISL grammar, per clause: greetings first, then TIME, SUBJECT, OBJECTS/PLACES, DESCRIPTION,
+   *  then the negative (NOT) and finally the question word (WHERE, WHAT ...). */
   translate(text) {
-    const words = String(text).toLowerCase().replace(/[’']/g, "'").replace(/[^a-z0-9' -]+/g, " ").split(/\s+/).filter(Boolean);
+    const clauses = String(text).toLowerCase().replace(/[’']/g, "'")
+      .split(/[.!?;,]+|\s+(?:and|but|because|so|then)\s+/).map((c) => c.trim()).filter(Boolean);
+    const out = [];
+    clauses.forEach((c, ci) => { for (const t of this._clause(c)) out.push({ ...t, clause: ci }); });
+    // greetings always open the conversation
+    const greet = out.filter((t) => t.cat === "greetings");
+    return [...greet, ...out.filter((t) => t.cat !== "greetings")];
+  }
+
+  _clause(clause) {
+    const words = clause.replace(/[^a-z0-9' -]+/g, " ").split(/\s+/).filter(Boolean);
     const items = [];
+    const POSSESSIVE = new Set(["my", "your", "his", "her", "our", "their", "its"]);
     for (let i = 0; i < words.length;) {
+      // "my mother" -> MOTHER: the possessive is not signed before a noun
+      if (POSSESSIVE.has(words[i]) && i + 1 < words.length && (this._lookup(words[i + 1]) || this.phrases.get(words.slice(i + 1, i + 3).join(" ")))) { i++; continue; }
       let hit = null, len = 0;
       for (let n = Math.min(4, words.length - i); n >= 1; n--) {          // longest phrase first
         const phrase = words.slice(i, i + n).join(" ");
@@ -77,23 +94,33 @@ export class EnglishToISL {
       }
       if (hit) { items.push({ label: hit, text: this.display[hit] || hit, kind: "sign", cat: this.category[hit] || "" }); i += len; continue; }
       const w = words[i++].replace(/'/g, "");
-      if (!DROP.has(w) && w.length > 0) items.push({ label: null, text: w, kind: "spell", cat: "" });
+      if (NEGATION.has(w)) items.push({ label: null, text: "not", kind: "spell", cat: "negation" });
+      else if (!DROP.has(w) && w.length > 0) items.push({ label: null, text: w, kind: "spell", cat: QUESTION.has(w) ? "question" : "" });
     }
-    // remove immediate duplicates ("I ... my" -> one I)
-    const out = items.filter((t, i) => !(i > 0 && t.label && t.label === items[i - 1].label));
-    // ISL order: greetings, then time, then the rest; adjective after its noun
-    const greet = out.filter((t) => t.cat === "greetings");
-    const time = out.filter((t) => t.cat === "days and time" || t.cat === "seasons");
-    const rest = out.filter((t) => !greet.includes(t) && !time.includes(t));
-    for (let i = 0; i + 1 < rest.length; i++) {
+    // one subject per clause ("I ... my" -> I), no repeated signs
+    const seen = new Set();
+    const toks = items.filter((t) => { const k = t.label || t.text; if (seen.has(k)) return false; seen.add(k); return true; });
+    const isAdj = (t) => t.cat === "adjectives" || t.cat === "colours";
+    const greet = toks.filter((t) => t.cat === "greetings");
+    const time = toks.filter((t) => t.cat === "days and time" || t.cat === "seasons");
+    let subj = toks.find((t) => t.cat === "pronouns") || null;
+    if (subj && subj.label === "it" && toks.filter((t) => t.kind === "sign").length > 1) { toks.splice(toks.indexOf(subj), 1); subj = null; }   // dummy "it"
+    const neg = toks.filter((t) => t.cat === "negation");
+    const q = toks.filter((t) => t.cat === "question");
+    // words without a sign are mostly verbs ("buy", "call", "open"): ISL puts the action last
+    const verbs = toks.filter((t) => t.kind === "spell" && !t.cat);
+    const rest = toks.filter((t) => !greet.includes(t) && !time.includes(t) && t !== subj && !neg.includes(t) && !q.includes(t) && !verbs.includes(t));
+    // a description follows what it describes: "red car" -> CAR RED; "I am sick" -> I SICK
+    const body = [];
+    for (let i = 0; i < rest.length; i++) {
       const a = rest[i], b = rest[i + 1];
-      const adj = (t) => t.cat === "adjectives" || t.cat === "colours";
-      const noun = (t) => t.kind === "sign" && !adj(t) && t.cat !== "pronouns";
-      if (adj(a) && noun(b)) { rest[i] = b; rest[i + 1] = a; i++; }
+      if (isAdj(a) && b && !isAdj(b) && b.kind === "sign") { body.push(b, a); i++; } else body.push(a);
     }
-    // ISL puts question words at the end: "station where?"
-    const QUESTION = new Set(["what", "where", "when", "who", "why", "how", "which", "whose"]);
-    const q = rest.filter((t) => t.kind === "spell" && QUESTION.has(t.text));
-    return [...greet, ...time, ...rest.filter((t) => !q.includes(t)), ...q];
+    const desc = body.filter(isAdj);
+    // keep adjective-after-noun pairs together, other descriptions after the objects
+    const ordered = [];
+    for (const t of body) if (!isAdj(t) || ordered.length && !isAdj(ordered[ordered.length - 1]) && body.indexOf(t) === body.indexOf(ordered[ordered.length - 1]) + 1) ordered.push(t);
+    for (const t of desc) if (!ordered.includes(t)) ordered.push(t);
+    return [...greet, ...time, ...(subj ? [subj] : []), ...ordered, ...verbs, ...neg, ...q];
   }
 }

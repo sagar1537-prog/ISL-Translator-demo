@@ -46,6 +46,19 @@ No sign-language recogniser is 100% accurate. People sign differently, cameras a
   - greetings come first, then time words, and question words go last;
   - adjectives follow their noun;
   - synonyms are mapped (ticket → train ticket, mom → mother, phone → cell phone…).
+- Word order follows ISL grammar, clause by clause:
+  - greetings first;
+  - then **time → subject → objects and places → description → action**;
+  - then **NOT**, then the **question word** last.
+
+  For example, "My mother is very sick, please call a doctor. Where is the hospital?" becomes MOTHER SICK | DOCTOR CALL | HOSPITAL WHERE.
+- The avatar cleans every recording before playing it:
+  - a hand the tracker put on the wrong arm is moved back;
+  - one- or two-frame flickers are removed and short drop-outs filled;
+  - jitter is smoothed;
+  - playback blends between recorded frames.
+
+  Hands are drawn with a palm and fingers, slightly enlarged, held in front of the chest, and they stay attached to the arm as they come and go.
 - Each sign is a real recorded signer. For every word, the training picks the clearest recording the model is most sure about; your own Teach-mode take is used first if you recorded one.
 - Words with no sign appear as dashed text chips. Teach them in Teach mode and they become signs.
 
