@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ISL Translator Mk III</title>
+  <meta name="description" content="Two-way Indian Sign Language translator: signs to English, English to signs">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232337C6'/%3E%3Cpath d='M11 22v-9.5a1.5 1.5 0 0 1 3 0V17v-7a1.5 1.5 0 0 1 3 0v7-6a1.5 1.5 0 0 1 3 0v8l1.6-2.2a1.5 1.5 0 0 1 2.5 1.7L21 24a4 4 0 0 1-3.4 2H15a4 4 0 0 1-4-4z' fill='%23FF9F1C'/%3E%3C/svg%3E">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/lexend-latin-600-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <p class="name">ISL Translator <span class="mk">Mk III</span></p>
+        <p class="sub">Two-way: signs to English, English to signs</p>
+      </div>
+    </div>
+    <ul class="chips" aria-label="Status">
+      <li id="stCam" data-s="off"><i></i><span>Camera off</span></li>
+      <li id="stHands" data-s="off"><i></i><span>No hands</span></li>
+      <li id="stModel" data-s="off"><i></i><span>Loading model</span></li>
+    </ul>
+  </header>
+
+  <nav class="modes" role="tablist" aria-label="Mode">
+    <button type="button" role="tab" data-mode="sign" aria-selected="true">Sign → English</button>
+    <button type="button" role="tab" data-mode="speak" aria-selected="false">English → Sign</button>
+    <button type="button" role="tab" data-mode="teach" aria-selected="false">Teach</button>
+  </nav>
+
+  <main class="grid">
+    <section class="cam" aria-label="Camera">
+      <div class="tilt" id="tilt">
+        <div class="video-box" id="videoBox">
+          <video id="video" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <p class="frame-hint" id="frameHint" hidden></p>
+          <ol class="guesses" id="guesses" hidden aria-label="Model's top guesses"></ol>
+          <p class="rec-overlay" id="recOverlay" hidden></p>
+          <div class="gate" id="gate">
+            <h1>Sign a sentence</h1>
+            <p>Sign at your natural speed. A short pause ends the sentence. Video stays on this computer.</p>
+            <button class="btn primary" id="startBtn" type="button">Start camera</button>
+            <p class="gate-msg" id="gateMsg" role="alert"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="Live sign">
+      <canvas id="three" aria-hidden="true"></canvas>
+      <div class="live">
+        <p class="live-label">Now signing</p>
+        <p class="live-word idle" id="liveWord" aria-live="polite">Ready</p>
+        <div class="meter" aria-hidden="true"><div id="meter"></div></div>
+      </div>
+    </section>
+
+    <section class="saying" aria-label="Sentence">
+      <div class="saying-head">
+        <h2>They're saying</h2>
+        <div class="tools">
+          <button class="btn quiet" id="speakBtn" type="button" aria-pressed="true">Speech on</button>
+          <button class="btn quiet" id="clearBtn" type="button">Clear</button>
+        </div>
+      </div>
+      <p class="sentence" id="sentence" aria-live="polite"><span class="hint">Start the camera and sign. Words appear below; the sentence forms when you pause.</span></p>
+      <ol class="gloss" id="gloss" aria-label="Signs in this sentence"></ol>
+    </section>
+
+    <section class="summary card" aria-label="Summary">
+      <h2>Summary</h2>
+      <p id="summary" class="muted">A short summary of the conversation builds up here.</p>
+      <ul class="topics" id="topics"></ul>
+    </section>
+
+    <section class="speak" aria-label="English to sign">
+      <div class="avatar-box">
+        <canvas id="avatar" aria-label="Signing avatar"></canvas>
+        <p class="avatar-word" id="avatarWord" aria-live="polite"></p>
+      </div>
+      <div class="e2s card">
+        <h2>Say or type something</h2>
+        <div class="e2s-row">
+          <button class="btn mic" id="micBtn" type="button">Speak</button>
+          <input id="e2sInput" type="text" placeholder="e.g. Good morning, I need a train ticket for tomorrow" autocomplete="off">
+          <button class="btn primary small-btn" id="e2sGo" type="button">Sign it</button>
+        </div>
+        <p class="muted small" id="micState"></p>
+        <h3>In ISL order</h3>
+        <ol class="e2s-gloss" id="e2sGloss"><li class="muted empty">The signs appear here, in ISL word order. Tap one to replay it.</li></ol>
+        <p class="note" id="e2sNote"></p>
+        <div class="e2s-tools">
+          <label class="sens">Speed <input type="range" id="e2sSpeed" min="0.5" max="1.5" step="0.25" value="1"> <span id="e2sSpeedVal">1×</span></label>
+          <button class="btn ghost" id="e2sReplay" type="button">Replay</button>
+        </div>
+        <p class="muted small">Each sign is a real signer's recorded movement from the dataset (or your own take from Teach mode), so it is never invented.</p>
+      </div>
+    </section>
+
+    <section class="teach card" aria-label="Teach your own signs">
+      <h2>Teach a sign</h2>
+      <p class="muted">Record yourself signing a word three times. It makes the model match <em>your</em> signing, and you can add words the dataset does not have (for example "want", "where", "go").</p>
+      <div class="e2s-row">
+        <input id="teachWord" type="text" list="wordList" placeholder="Word to teach" autocomplete="off">
+        <button class="btn primary small-btn" id="teachRec" type="button">Record 3 takes</button>
+      </div>
+      <datalist id="wordList"></datalist>
+      <p class="note" id="teachState" aria-live="polite">Select Start camera (on the left), then type a word and record.</p>
+      <ol class="steps">
+        <li>Sit so your head, shoulders and hands are in view.</li>
+        <li>After the countdown, sign the word once, start to finish (about 2 seconds).</li>
+        <li>When you have recorded your words, run <b>finetune.bat</b> (a few minutes). Reload this page.</li>
+      </ol>
+      <h3>Your signs <span class="muted small" id="teachCount"></span></h3>
+      <ul class="my-signs" id="mySigns"></ul>
+    </section>
+
+    <section class="history card" aria-label="Conversation">
+      <h2>Conversation</h2>
+      <ol id="history"><li class="muted empty">Finished sentences are listed here.</li></ol>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <label class="sens">Sensitivity
+      <input type="range" id="sens" min="0.40" max="0.95" step="0.05" value="0.70" aria-describedby="sensHelp">
+      <span id="sensVal">70%</span>
+    </label>
+    <p id="sensHelp" class="muted small">Lower shows words sooner; higher makes fewer mistakes.</p>
+    <label class="sens testtoggle"><input type="checkbox" id="testMode"> Test mode</label>
+    <p class="muted small" id="perf"></p>
+  </footer>
+
+  <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
